@@ -1,4 +1,4 @@
-import { useContext, useState } from 'react';
+import { useContext, useState, useEffect } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -26,8 +26,7 @@ import axios from 'axios';
 import { AuthContext } from '../Providers/AuthProvider';
 
 const TaskManagement = () => {
-    const {user} = useContext(AuthContext)
-    console.log(user);
+  const { user } = useContext(AuthContext);
   const [columns, setColumns] = useState({
     'to-do': {
       id: 'to-do',
@@ -35,15 +34,7 @@ const TaskManagement = () => {
       icon: ListTodo,
       color: 'text-blue-600',
       bgColor: 'bg-blue-50',
-      tasks: [
-        {
-          id: '1',
-          title: 'Design new landing page',
-          description: 'Create a modern and responsive landing page design',
-          timestamp: new Date().toISOString(),
-          category: 'to-do'
-        }
-      ]
+      tasks: []
     },
     'in-progress': {
       id: 'in-progress',
@@ -51,15 +42,7 @@ const TaskManagement = () => {
       icon: Clock,
       color: 'text-yellow-600',
       bgColor: 'bg-yellow-50',
-      tasks: [
-        {
-          id: '2',
-          title: 'Implement authentication',
-          description: 'Add user authentication using Firebase',
-          timestamp: new Date().toISOString(),
-          category: 'in-progress'
-        }
-      ]
+      tasks: []
     },
     'done': {
       id: 'done',
@@ -67,15 +50,7 @@ const TaskManagement = () => {
       icon: CheckCircle2,
       color: 'text-green-600',
       bgColor: 'bg-green-50',
-      tasks: [
-        {
-          id: '3',
-          title: 'Setup project structure',
-          description: 'Initialize project and configure basic settings',
-          timestamp: new Date().toISOString(),
-          category: 'done'
-        }
-      ]
+      tasks: []
     }
   });
 
@@ -99,11 +74,49 @@ const TaskManagement = () => {
     })
   );
 
+  // Fetch tasks from the backend
+  useEffect(() => {
+    const fetchTasks = async () => {
+      try {
+        const response = await axios.get('https://taskify-server-woad.vercel.app/tasks');
+        const tasks = response.data;
+
+        // Filter tasks for the logged-in user
+        const userTasks = tasks.filter(task => task.user === user.email);
+
+        // Organize tasks into columns
+        const updatedColumns = {
+          'to-do': {
+            ...columns['to-do'],
+            tasks: userTasks.filter(task => task.category === 'to-do')
+          },
+          'in-progress': {
+            ...columns['in-progress'],
+            tasks: userTasks.filter(task => task.category === 'in-progress')
+          },
+          'done': {
+            ...columns['done'],
+            tasks: userTasks.filter(task => task.category === 'done')
+          }
+        };
+
+        setColumns(updatedColumns);
+      } catch (error) {
+        console.error('Error fetching tasks:', error);
+        toast.error('Failed to fetch tasks. Please try again.');
+      }
+    };
+
+    if (user?.email) {
+      fetchTasks();
+    }
+  }, [user]);
+
   const DroppableContainer = ({ id, children, className }) => {
     const { setNodeRef } = useDroppable({
       id
     });
-  
+
     return (
       <div ref={setNodeRef} className={className}>
         {children}
@@ -120,14 +133,14 @@ const TaskManagement = () => {
     return container;
   };
 
-    const handleDragStart = (event) => {
+  const handleDragStart = (event) => {
     const { active } = event;
     setActiveId(active.id);
   };
 
   const handleDragOver = (event) => {
     const { active, over } = event;
-    
+
     if (!over) return;
 
     const activeId = active.id;
@@ -161,10 +174,9 @@ const TaskManagement = () => {
     });
   };
 
-
   const handleDragEnd = (event) => {
     const { active, over } = event;
-    
+
     if (!over) {
       setActiveId(null);
       return;
@@ -202,46 +214,57 @@ const TaskManagement = () => {
 
   const handleAddTask = async (e) => {
     e.preventDefault();
-    
-    if (newTask.title.length > 50) {
-      toast.error('Title must be less than 50 characters');
+  
+    if (newTask.title.length > 50 || newTask.description.length > 200) {
+      toast.error('Title or description exceeds character limit');
       return;
     }
   
-    if (newTask.description.length > 200) {
-      toast.error('Description must be less than 200 characters');
-      return;
-    }
+    const tempId = Date.now().toString(); // Temporary ID for UI
+    const task = { id: tempId, ...newTask, user: user.email, timestamp: new Date().toISOString() };
   
-    const task = {
-      id: Date.now().toString(),
-      ...newTask,
-      timestamp: new Date().toISOString(),
-      user:user.email
-      
-    };
+    // Optimistically update UI
+    setColumns(prev => ({
+      ...prev,
+      [newTask.category]: {
+        ...prev[newTask.category],
+        tasks: [...prev[newTask.category].tasks, task]
+      }
+    }));
+  
+    setNewTask({ title: '', description: '', category: 'to-do' });
+    setIsModalOpen(false);
   
     try {
       const response = await axios.post('https://taskify-server-woad.vercel.app/tasks', task);
-      
-      if (response.status === 200 || response.status === 201) {
-        setColumns(prevColumns => ({
-          ...prevColumns,
+  
+      if (response.status === 201) {
+        setColumns(prev => ({
+          ...prev,
           [newTask.category]: {
-            ...prevColumns[newTask.category],
-            tasks: [...prevColumns[newTask.category].tasks, response.data]
+            ...prev[newTask.category],
+            tasks: prev[newTask.category].tasks.map(t =>
+              t.id === tempId ? { ...response.data } : t
+            )
           }
         }));
-  
-        setNewTask({ title: '', description: '', category: 'to-do' });
-        setIsModalOpen(false);
         toast.success('Task added successfully!');
       }
     } catch (error) {
       console.error('Error adding task:', error);
-      toast.error('Failed to add task. Please try again.');
+      toast.error('Failed to add task.');
+  
+      // Rollback optimistic update on failure
+      setColumns(prev => ({
+        ...prev,
+        [newTask.category]: {
+          ...prev[newTask.category],
+          tasks: prev[newTask.category].tasks.filter(t => t.id !== tempId)
+        }
+      }));
     }
   };
+  
 
   const handleEditTask = (task) => {
     setEditingTask(task);
@@ -253,53 +276,98 @@ const TaskManagement = () => {
     setIsModalOpen(true);
   };
 
-  const handleUpdateTask = (e) => {
+  const handleUpdateTask = async (e) => {
     e.preventDefault();
-
+  
     if (newTask.title.length > 50) {
       toast.error('Title must be less than 50 characters');
       return;
     }
-
+  
     if (newTask.description.length > 200) {
       toast.error('Description must be less than 200 characters');
       return;
     }
-
-    const updatedColumns = {
-      ...columns,
-      [editingTask.category]: {
-        ...columns[editingTask.category],
-        tasks: columns[editingTask.category].tasks.map(task =>
-          task.id === editingTask.id
-            ? { ...task, ...newTask }
-            : task
-        )
+  
+    try {
+      const response = await axios.put(`https://taskify-server-woad.vercel.app/tasks/${editingTask._id}`, newTask);
+         
+      if (response.status === 200) {
+        let updatedColumns = { ...columns };
+  
+        // If the category has changed, move the task to the new category
+        if (editingTask.category !== newTask.category) {
+          updatedColumns = {
+            ...columns,
+            [editingTask.category]: {
+              ...columns[editingTask.category],
+              tasks: columns[editingTask.category].tasks.filter(task => task.id !== editingTask.id)
+            },
+            [newTask.category]: {
+              ...columns[newTask.category],
+              tasks: [...columns[newTask.category].tasks, { ...editingTask, ...newTask }]
+            }
+          };
+        } else {
+          // If the category hasn't changed, just update the task within the same category
+          updatedColumns = {
+            ...columns,
+            [editingTask.category]: {
+              ...columns[editingTask.category],
+              tasks: columns[editingTask.category].tasks.map(task =>
+                task.id === editingTask.id
+                  ? { ...task, ...newTask }
+                  : task
+              )
+            }
+          };
+        }
+  
+        setColumns(updatedColumns);
+        setIsModalOpen(false);
+        setEditingTask(null);
+        setNewTask({ title: '', description: '', category: 'to-do' });
+        toast.success('Task updated successfully!');
       }
-    };
-
-    setColumns(updatedColumns);
-    setIsModalOpen(false);
-    setEditingTask(null);
-    setNewTask({ title: '', description: '', category: 'to-do' });
-    toast.success('Task updated successfully!');
+    } catch (error) {
+      console.error('Error updating task:', error);
+      toast.error('Failed to update task. Please try again.');
+    }
   };
 
-  const handleDeleteTask = (taskId, category) => {
-    setColumns({
-      ...columns,
+  const handleDeleteTask = async (taskId, category) => {
+    // Optimistically update UI
+    const previousColumns = { ...columns };
+    setColumns(prev => ({
+      ...prev,
       [category]: {
-        ...columns[category],
-        tasks: columns[category].tasks.filter(task => task.id !== taskId)
+        ...prev[category],
+        tasks: prev[category].tasks.filter(task => task._id !== taskId)
       }
-    });
-    toast.success('Task deleted successfully!');
+    }));
+  
+    try {
+      const response = await axios.delete(`https://taskify-server-woad.vercel.app/tasks/${taskId}`);
+      
+      if (response.status === 200) {
+        // toast.success("Task deleted successfully!");
+      } else {
+        throw new Error("Failed to delete task");
+      }
+    } catch (error) {
+      console.error("Error deleting task:", error);
+      toast.error("Failed to delete task. Try again!");
+  
+      // Rollback UI update on failure
+      setColumns(previousColumns);
+    }
   };
+  
 
   return (
-    <div className=" bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
+    <div className="bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
       <ToastContainer />
-      
+
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
@@ -322,72 +390,71 @@ const TaskManagement = () => {
 
         {/* Task Columns */}
         <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
-        onDragEnd={handleDragEnd}
-      >
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {Object.values(columns).map(column => (
-            <div key={column.id} className="bg-white rounded-xl shadow-sm overflow-hidden">
-              <div className={`p-4 ${column.bgColor}`}>
-                <div className="flex items-center gap-2">
-                  <column.icon className={`w-5 h-5 ${column.color}`} />
-                  <h2 className="font-semibold">{column.title}</h2>
-                  <span className="ml-auto bg-white px-2 py-0.5 rounded text-sm">
-                    {column.tasks.length}
-                  </span>
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {Object.values(columns).map(column => (
+              <div key={column.id} className="bg-white rounded-xl shadow-sm overflow-hidden">
+                <div className={`p-4 ${column.bgColor}`}>
+                  <div className="flex items-center gap-2">
+                    <column.icon className={`w-5 h-5 ${column.color}`} />
+                    <h2 className="font-semibold">{column.title}</h2>
+                    <span className="ml-auto bg-white px-2 py-0.5 rounded text-sm">
+                      {column.tasks.length}
+                    </span>
+                  </div>
                 </div>
-              </div>
 
-              <DroppableContainer 
-                id={column.id} 
-                className="p-4 min-h-[200px]"
-              >
-                <SortableContext
-                  items={column.tasks.map(task => task.id)}
-                  strategy={verticalListSortingStrategy}
+                <DroppableContainer
+                  id={column.id}
+                  className="p-4 min-h-[200px]"
                 >
-                  {column.tasks.map((task) => (
-                    <SortableItem 
-                      key={task.id} 
-                      id={task.id}
-                    >
-                      <div onClick={(e) => e.stopPropagation()}>
-                        <TaskCard
-                          task={task}
-                          onEdit={() => handleEditTask(task)}
-                          onDelete={() => handleDeleteTask(task.id, task.category)}
-                        />
+                  <SortableContext
+                    items={column.tasks.map(task => task.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {column.tasks.map((task) => (
+                      <SortableItem
+                        key={task.id}
+                        id={task.id}
+                      >
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <TaskCard
+                            task={task}
+                            onEdit={() => handleEditTask(task)}
+                            onDelete={() => handleDeleteTask(task._id, task.category)}
+                          />
+                        </div>
+                      </SortableItem>
+                    ))}
+                    {column.tasks.length === 0 && (
+                      <div className="text-gray-400 text-center py-4">
+                        Drop tasks here
                       </div>
-                    </SortableItem>
-                  ))}
-                  {column.tasks.length === 0 && (
-                    <div className="text-gray-400 text-center py-4">
-                      Drop tasks here
-                    </div>
-                  )}
-                </SortableContext>
-              </DroppableContainer>
-            </div>
-          ))}
-        </div>
+                    )}
+                  </SortableContext>
+                </DroppableContainer>
+              </div>
+            ))}
+          </div>
 
-        <DragOverlay>
-          {activeId ? (
-            <div className="transform-none">
-              <TaskCard
-                task={Object.values(columns)
-                  .flatMap(col => col.tasks)
-                  .find(task => task.id === activeId)}
-                isDragging
-              />
-            </div>
-          ) : null}
-        </DragOverlay>
-      </DndContext>
-
+          <DragOverlay>
+            {activeId ? (
+              <div className="transform-none">
+                <TaskCard
+                  task={Object.values(columns)
+                    .flatMap(col => col.tasks)
+                    .find(task => task.id === activeId)}
+                  isDragging
+                />
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       </div>
 
       {/* Task Modal */}
