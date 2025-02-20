@@ -16,7 +16,8 @@ const Login = () => {
     window.scrollTo(0, 0);
   }, []);
 
-  const { signIn, setUser, googleSignin } = useContext(AuthContext);
+  const { signIn, setUser, googleSignin, user } = useContext(AuthContext);
+  console.log(user);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -38,8 +39,9 @@ const Login = () => {
         };
   
         // Send the user data to the backend using Axios
-        axios.post('https://assignment-12-blue.vercel.app/users', userData)
+        axios.post('https://taskify-server-woad.vercel.app/users', userData)
           .then((response) => {
+           
             MySwal.fire({
               title: "Welcome Back! 👋",
               text: "Login successful",
@@ -51,7 +53,7 @@ const Login = () => {
               iconColor: "#4f46e5",
             });
             setTimeout(() => {
-              navigate(location?.state ? location.state : "/");
+              navigate(location?.state ? location.state : "/home");
             }, 500);
           })
           .catch((err) => {
@@ -60,8 +62,11 @@ const Login = () => {
               text: `Failed to save user data: ${err.message}`,
               icon: "error",
               background: "#f8fafc",
-              confirmButtonColor: "#4f46e5",
+              
             });
+            setTimeout(() => {
+              navigate(location?.state ? location.state : "/home");
+            }, 500);
           });
       })
       .catch((err) => {
@@ -96,7 +101,7 @@ const Login = () => {
           iconColor: "#4f46e5",
         });
         setTimeout(() => {
-          navigate(location?.state ? location.state : "/");
+          navigate(location?.state ? location.state : "/home");
         }, 800);
       })
       .catch((err) => {

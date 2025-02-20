@@ -1,8 +1,9 @@
-import { createContext, useState } from "react";
+import { createContext, useEffect, useState } from "react";
 import {
     createUserWithEmailAndPassword,
     getAuth,
     GoogleAuthProvider,
+    onAuthStateChanged,
     signInWithEmailAndPassword,
     signInWithPopup,
     signOut,
@@ -75,30 +76,41 @@ const AuthProvider = ({ children }) => {
     };
 
     // useEffect(() => {
-    //     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    //     const unsubscribe = onAuthStateChanged(auth, currentUser => {
     //         setUser(currentUser);
+            
 
-    //         if (currentUser?.email) {
-    //             const user = { email: currentUser.email };
-
-    //             axios
-    //                 .post("https://assignment-12-blue.vercel.app/jwt", user, { withCredentials: true })
-    //                 .then((res) => {
-    //                     setLoading(false);
-    //                 });
-    //         } else {
-    //             axios
-    //                 .post("https://assignment-12-blue.vercel.app/logout", {}, { withCredentials: true })
-    //                 .then((res) => {
-    //                     setLoading(false);
-    //                 });
+    //         if(currentUser?.email){
+    //             const user = {email: currentUser.email};
+                
+    //             axios.post("https://assignment-11-flame.vercel.app/jwt", user, {withCredentials: true})
+    //             .then(res =>{
+    //                 setLoading(false);
+    //             })
     //         }
-    //     });
+    //         else{
+    //             axios.post('https://assignment-11-flame.vercel.app/logout',{}, {withCredentials:true})
+    //             .then(res => {
+    //                 setLoading(false);
+    //             })
+    //         }
+
+            
+    //     })
 
     //     return () => {
     //         unsubscribe();
-    //     };
-    // }, []);
+    //     }
+    // }, [])
+    useEffect(()=>{
+        const unSubscribe = onAuthStateChanged(auth,(currentUser)=>{
+            setUser(currentUser)
+            setLoading(false)
+        })
+        return ()=>{
+            unSubscribe()
+        }
+    },[])
 
  
 

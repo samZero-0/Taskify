@@ -1,9 +1,24 @@
+import { useContext } from "react";
+import { AuthContext } from "../Providers/AuthProvider";
 
 const Home = () => {
+
+    const {user} = useContext(AuthContext)
+    // console.log(user);
+    
+
+
     return (
         <div>
-            <p>Lorem ipsum dolor sit amet consectetur adipisicing elit. Molestias suscipit temporibus molestiae? Exercitationem esse eaque voluptates nulla consequatur laudantium nihil impedit quos necessitatibus quis? Nemo repellat asperiores consectetur dolorem unde.</p>
+           {user?.displayName}
+
+
+           {/* <button className="p-3 border" onClick={handleLogout}>Log out</button> */}
+
+
         </div>
+
+       
     );
 };
 

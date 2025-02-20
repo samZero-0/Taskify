@@ -5,24 +5,26 @@ import {
 
 import MainLayout from "../Layouts/MainLayout"
 import Login from "../Pages/Login";
-import Home from "../Components/Home";
+// import Home from "../Components/Home";
+import PrivateRoute from "./PrivateRoute";
+import TaskManagement from "../Pages/TaskManagement";
 
 
   export const router = createBrowserRouter([
    
       {
-        path: "/",
+        path: "/home",
         element: <MainLayout></MainLayout>,
         children:[
           {
             path:"",
-            element:<Home></Home>
+            element:<PrivateRoute><TaskManagement></TaskManagement></PrivateRoute>
 
           }
         ]
       },
       {
-        path:'/login',
+        path:'/',
         element: <Login></Login>
       }
       

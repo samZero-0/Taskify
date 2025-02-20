@@ -12,7 +12,7 @@ const Layout = () => {
       
       {/* Main Content */}
       <div className="flex-1 p-8 bg-gray-100 ml-16 lg:ml-0">
-        <div className="max-w-4xl mx-auto">
+        <div className=" mx-auto">
           <Outlet />
         </div>
       </div>
