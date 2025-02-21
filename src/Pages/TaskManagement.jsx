@@ -27,6 +27,7 @@ import { AuthContext } from '../Providers/AuthProvider';
 
 const TaskManagement = () => {
   const { user } = useContext(AuthContext);
+  const [lastSyncTime, setLastSyncTime] = useState(Date.now());
   const [columns, setColumns] = useState({
     'to-do': {
       id: 'to-do',
@@ -74,43 +75,68 @@ const TaskManagement = () => {
     })
   );
 
+   // Function to update task order in database
+   const updateTaskOrder = async (categoryId, tasks) => {
+    try {
+      const updates = tasks.map((task, index) => ({
+        taskId: task._id,
+        order: index,
+        category: categoryId
+      }));
+
+      await axios.post('https://taskify-server-woad.vercel.app/tasks/update-order', updates);
+    } catch (error) {
+      console.error('Error updating task order:', error);
+      toast.error('Failed to update task order');
+    }
+  };
+
+
+
   // Fetch tasks from the backend
   useEffect(() => {
-    const fetchTasks = async () => {
+    const pollInterval = setInterval(async () => {
+      if (!user?.email) return;
+
       try {
-        const response = await axios.get('https://taskify-server-woad.vercel.app/tasks');
-        const tasks = response.data;
+        const response = await axios.get(`https://taskify-server-woad.vercel.app/tasks?since=${lastSyncTime}`);
+        const updatedTasks = response.data;
 
-        // Filter tasks for the logged-in user
-        const userTasks = tasks.filter(task => task.user === user.email);
+        if (updatedTasks.length > 0) {
+          setColumns(prev => {
+            const newColumns = { ...prev };
+            
+            // Reset all column tasks
+            Object.keys(newColumns).forEach(key => {
+              newColumns[key].tasks = [];
+            });
 
-        // Organize tasks into columns
-        const updatedColumns = {
-          'to-do': {
-            ...columns['to-do'],
-            tasks: userTasks.filter(task => task.category === 'to-do')
-          },
-          'in-progress': {
-            ...columns['in-progress'],
-            tasks: userTasks.filter(task => task.category === 'in-progress')
-          },
-          'done': {
-            ...columns['done'],
-            tasks: userTasks.filter(task => task.category === 'done')
-          }
-        };
+            // Distribute tasks to columns and sort by order
+            updatedTasks
+              .filter(task => task.user === user.email)
+              .forEach(task => {
+                if (newColumns[task.category]) {
+                  newColumns[task.category].tasks.push(task);
+                }
+              });
 
-        setColumns(updatedColumns);
+            // Sort tasks by order within each column
+            Object.keys(newColumns).forEach(key => {
+              newColumns[key].tasks.sort((a, b) => a.order - b.order);
+            });
+
+            return newColumns;
+          });
+
+          setLastSyncTime(Date.now());
+        }
       } catch (error) {
-        console.error('Error fetching tasks:', error);
-        toast.error('Failed to fetch tasks. Please try again.');
+        console.error('Error polling tasks:', error);
       }
-    };
+    }, 100); // Poll every 3 seconds
 
-    if (user?.email) {
-      fetchTasks();
-    }
-  }, [user]);
+    return () => clearInterval(pollInterval);
+  }, [user, lastSyncTime]);
 
   const DroppableContainer = ({ id, children, className }) => {
     const { setNodeRef } = useDroppable({
@@ -138,9 +164,8 @@ const TaskManagement = () => {
     setActiveId(active.id);
   };
 
-  const handleDragOver = (event) => {
+  const handleDragOver = async (event) => {
     const { active, over } = event;
-
     if (!over) return;
 
     const activeId = active.id;
@@ -160,6 +185,14 @@ const TaskManagement = () => {
       const activeIndex = activeItems.findIndex(item => item.id === activeId);
       const task = activeItems[activeIndex];
 
+      // Update the task in the database immediately
+      const updatedTask = { ...task, category: overContainer };
+      axios.put(`https://taskify-server-woad.vercel.app/tasks/${task._id}`, updatedTask)
+        .catch(error => {
+          console.error('Error updating task category:', error);
+          toast.error('Failed to update task category');
+        });
+
       return {
         ...prev,
         [activeContainer]: {
@@ -174,9 +207,9 @@ const TaskManagement = () => {
     });
   };
 
-  const handleDragEnd = (event) => {
-    const { active, over } = event;
 
+  const handleDragEnd = async (event) => {
+    const { active, over } = event;
     if (!over) {
       setActiveId(null);
       return;
@@ -186,23 +219,25 @@ const TaskManagement = () => {
     const overContainer = findContainer(over.id);
 
     if (activeContainer && overContainer) {
-      const activeIndex = columns[activeContainer].tasks.findIndex(
-        task => task.id === active.id
-      );
-      const overIndex = columns[overContainer].tasks.findIndex(
-        task => task.id === over.id
-      );
-
-      if (activeContainer === overContainer) {
-        // Reordering within the same container
-        setColumns(prev => ({
-          ...prev,
-          [activeContainer]: {
+      setColumns(prev => {
+        const newColumns = { ...prev };
+        
+        if (activeContainer === overContainer) {
+          const items = [...prev[activeContainer].tasks];
+          const oldIndex = items.findIndex(item => item.id === active.id);
+          const newIndex = items.findIndex(item => item.id === over.id);
+          
+          newColumns[activeContainer] = {
             ...prev[activeContainer],
-            tasks: arrayMove(prev[activeContainer].tasks, activeIndex, overIndex)
-          }
-        }));
-      }
+            tasks: arrayMove(items, oldIndex, newIndex)
+          };
+
+          // Update order in database
+          updateTaskOrder(activeContainer, newColumns[activeContainer].tasks);
+        }
+
+        return newColumns;
+      });
     }
 
     setActiveId(null);
