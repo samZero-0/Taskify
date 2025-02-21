@@ -8,7 +8,8 @@ import {
   useSensor,
   useSensors,
   closestCenter,
-  useDroppable
+  useDroppable,
+  TouchSensor
 } from '@dnd-kit/core';
 import {
   arrayMove,
@@ -58,6 +59,8 @@ const TaskManagement = () => {
   const [activeId, setActiveId] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
+  const [loading, setLoading] = useState(true);
+
   const [newTask, setNewTask] = useState({
     title: '',
     description: '',
@@ -65,15 +68,48 @@ const TaskManagement = () => {
   });
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
+    useSensor(TouchSensor, {
+      // Configuring touch sensor for better mobile experience
       activationConstraint: {
-        distance: 8, // Add a small threshold to prevent accidental drags
+        delay: 250, // Add a small delay for touch devices
+        tolerance: 5, // Add tolerance for slight movements
+      },
+    }),
+    useSensor(PointerSensor, {
+      // Keeping pointer sensor for desktop
+      activationConstraint: {
+        distance: 8,
+        delay: 250,
       },
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
+
+    // Add touch event handlers to prevent default scrolling during drag
+    useEffect(() => {
+      const preventDefaultTouchMove = (e) => {
+        if (activeId) {
+          e.preventDefault();
+        }
+      };
+  
+      document.addEventListener('touchmove', preventDefaultTouchMove, { passive: false });
+      
+      return () => {
+        document.removeEventListener('touchmove', preventDefaultTouchMove);
+      };
+    }, [activeId]);
+  
+
+
+  // Helper function to check if tasks are different
+const areTasksChanged = (oldTasks, newTasks) => {
+  if (oldTasks.length !== newTasks.length) return true;
+  
+  return JSON.stringify(oldTasks) !== JSON.stringify(newTasks);
+};
 
    // Function to update task order in database
    const updateTaskOrder = async (categoryId, tasks) => {
@@ -95,48 +131,47 @@ const TaskManagement = () => {
 
   // Fetch tasks from the backend
   useEffect(() => {
-    const pollInterval = setInterval(async () => {
-      if (!user?.email) return;
+  const pollInterval = setInterval(async () => {
+    if (!user?.email) return;
 
-      try {
-        const response = await axios.get(`https://taskify-server-woad.vercel.app/tasks?since=${lastSyncTime}`);
-        const updatedTasks = response.data;
+    try {
+      const response = await axios.get(`https://taskify-server-woad.vercel.app/tasks`);
+      const updatedTasks = response.data;
 
-        if (updatedTasks.length > 0) {
-          setColumns(prev => {
-            const newColumns = { ...prev };
-            
-            // Reset all column tasks
-            Object.keys(newColumns).forEach(key => {
-              newColumns[key].tasks = [];
-            });
+      setColumns(prev => {
+        const newColumns = { ...prev };
+        const hasChanges = Object.keys(newColumns).some(key => {
+          const currentTasks = newColumns[key].tasks;
+          const newTasks = updatedTasks
+            .filter(task => task.user === user.email && task.category === key)
+            .sort((a, b) => (a.order || 0) - (b.order || 0));
+          
+          return areTasksChanged(currentTasks, newTasks);
+        });
 
-            // Distribute tasks to columns and sort by order
-            updatedTasks
-              .filter(task => task.user === user.email)
-              .forEach(task => {
-                if (newColumns[task.category]) {
-                  newColumns[task.category].tasks.push(task);
-                }
-              });
-
-            // Sort tasks by order within each column
-            Object.keys(newColumns).forEach(key => {
-              newColumns[key].tasks.sort((a, b) => a.order - b.order);
-            });
-
-            return newColumns;
-          });
-
-          setLastSyncTime(Date.now());
+        if (!hasChanges) {
+          return prev; // Return previous state if no changes
         }
-      } catch (error) {
-        console.error('Error polling tasks:', error);
-      }
-    }, 100); // Poll every 3 seconds
 
-    return () => clearInterval(pollInterval);
-  }, [user, lastSyncTime]);
+        // Only update if there are actual changes
+        Object.keys(newColumns).forEach(key => {
+          newColumns[key].tasks = updatedTasks
+            .filter(task => task.user === user.email && task.category === key)
+            .sort((a, b) => (a.order || 0) - (b.order || 0));
+        });
+
+        return newColumns;
+      });
+
+      if (loading) setLoading(false);
+    } catch (error) {
+      console.error('Error polling tasks:', error);
+      if (loading) setLoading(false);
+    }
+  }, 100); // Poll every 3 seconds
+
+  return () => clearInterval(pollInterval);
+}, [user]);
 
   const DroppableContainer = ({ id, children, className }) => {
     const { setNodeRef } = useDroppable({
@@ -424,12 +459,23 @@ const TaskManagement = () => {
         </div>
 
         {/* Task Columns */}
+        {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {Object.values(columns).map(column => (
+            <div key={column.id} className="bg-white rounded-xl shadow-sm overflow-hidden animate-pulse">
+              <div className="h-[200px]"></div>
+            </div>
+          ))}
+        </div>
+      ) :(
+
         <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDragEnd={handleDragEnd}
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
         >
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {Object.values(columns).map(column => (
@@ -479,17 +525,17 @@ const TaskManagement = () => {
 
           <DragOverlay>
             {activeId ? (
-              <div className="transform-none">
+              <div className="transform-none touch-none">
                 <TaskCard
-                  task={Object.values(columns)
-                    .flatMap(col => col.tasks)
-                    .find(task => task.id === activeId)}
-                  isDragging
-                />
+                    task={Object.values(columns)
+                      .flatMap(col => col.tasks)
+                      .find(task => task.id === activeId)}
+                    isDragging
+                  />
               </div>
             ) : null}
           </DragOverlay>
-        </DndContext>
+        </DndContext>)}
       </div>
 
       {/* Task Modal */}
