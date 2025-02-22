@@ -13,10 +13,10 @@ import { AuthContext } from '../Providers/AuthProvider';
 
 const Sidebar = ({ isOpen, setIsOpen }) => {
   const menuItems = [
-    { icon: <Home size={20} />, text: 'Dashboard', path: '/' },
-    { icon: <CheckSquare size={20} />, text: 'Tasks', path: '/tasks' },
-    { icon: <Calendar size={20} />, text: 'Calendar', path: '/calendar' },
-    { icon: <Settings size={20} />, text: 'Settings', path: '/settings' },
+    { icon: <Home size={20} />, text: 'Dashboard', path: '/home' },
+    // { icon: <CheckSquare size={20} />, text: 'Tasks', path: '/tasks' },
+    // { icon: <Calendar size={20} />, text: 'Calendar', path: '/calendar' },
+    // { icon: <Settings size={20} />, text: 'Settings', path: '/settings' },
     
   ];
 
