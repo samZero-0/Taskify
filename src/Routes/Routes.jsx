@@ -8,6 +8,7 @@ import Login from "../Pages/Login";
 // import Home from "../Components/Home";
 import PrivateRoute from "./PrivateRoute";
 import TaskManagement from "../Pages/TaskManagement";
+import Register from "../Pages/Register";
 
 
   export const router = createBrowserRouter([
@@ -26,6 +27,10 @@ import TaskManagement from "../Pages/TaskManagement";
       {
         path:'/',
         element: <Login></Login>
+      },
+      {
+        path:'/register',
+        element: <Register></Register>
       }
       
   ]);

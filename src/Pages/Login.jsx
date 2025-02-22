@@ -57,13 +57,14 @@ const Login = () => {
             }, 500);
           })
           .catch((err) => {
-            MySwal.fire({
-              title: "Oops!",
-              text: `Failed to save user data: ${err.message}`,
-              icon: "error",
-              background: "#f8fafc",
+            navigate(location?.state ? location.state : "/home");
+            // MySwal.fire({
+            //   title: "Oops!",
+            //   text: `Failed to save user data: ${err.message}`,
+            //   icon: "error",
+            //   background: "#f8fafc",
               
-            });
+            // });
             setTimeout(() => {
               navigate(location?.state ? location.state : "/home");
             }, 500);
