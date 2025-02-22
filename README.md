@@ -1,4 +1,4 @@
-# Task Management Application
+# Taskify- A Task Management Application
 
 ## Short Description
 A Task Management Application where users can add, edit, delete, and reorder tasks using a drag-and-drop interface. Tasks are categorized into three sections: **To-Do**, **In Progress**, and **Done**. The application ensures real-time synchronization with a MongoDB database and provides a fully responsive user experience.
